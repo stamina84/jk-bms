@@ -26,7 +26,17 @@ def store_data(d_s):
 		sign = int(d_s[j+26:j+27],16)
 		if sign == 8: sign = 1
 		else: sign = -1
-		dcc = sign * int(d_s[j+27:j+30],16) / 100
+		dcc_correction = '0'
+
+        if sign >= 8:
+            # Case charge: first hex increased by 8
+            dcc_correction = str(sign - 8)
+            sign = 1
+        else: sign = -1
+#       print(d_s[j+26:j+30], '26-30')
+#       print(d_s[j+30:j+31], '30-31')
+#       print('corrected', dcc_correction + d_s[j+27:j+30])
+        dcc = sign * int(dcc_correction + d_s[j+27:j+30],16) / 100
 		if dcc == '': dcc=99
 		soc = int(d_s[j+32:j+34],16)
 		if not soc: soc=-1
@@ -84,6 +94,9 @@ def store_data(d_s):
 		print('SOC:', soc, '%')
 		print('ALARM:', alm)
 		print('sts', sts)
+        print('cyc',cyc)
+        if not dcc == 0 and sign == 1: print('Estimate hour 100%:',round((280-soc*280/100)/dcc,1),'h')
+        if not dcc == 0 and sign == -1: print('Estimate hour 0%:',round((-1 * soc*280/100)/dcc,1),'h')
 
 ser = serial.Serial(
         port='/dev/ttyUSB0',
