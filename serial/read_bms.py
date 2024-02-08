@@ -26,8 +26,7 @@ def store_data(d_s):
 		sign = int(d_s[j+26:j+27],16)
 		if sign == 8: sign = 1
 		else: sign = -1
-		dcc_correction = '0'
-
+		dcc_correction = 0
         if sign >= 8:
             # Case charge: first hex increased by 8
 			dcc_correction = int('8000', 16)
