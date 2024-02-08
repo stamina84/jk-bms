@@ -37,7 +37,7 @@ def store_data(d_s):
 #       print(d_s[j+30:j+31], '30-31')
 #       print('corrected', dcc_correction + d_s[j+27:j+30])
 		dcc = sign * (int(d_s[j+26:j+30],16) - dcc_correction) / 100
-		if dcc == '': dcc=99
+		if dcc == '': dcc=9999
 		soc = int(d_s[j+32:j+34],16)
 		if not soc: soc=-1
 		cyc = int(d_s[j+40:j+44],16)
