@@ -30,13 +30,13 @@ def store_data(d_s):
 
         if sign >= 8:
             # Case charge: first hex increased by 8
-            dcc_correction = str(sign - 8)
+			dcc_correction = int('8000', 16)
             sign = 1
         else: sign = -1
 #       print(d_s[j+26:j+30], '26-30')
 #       print(d_s[j+30:j+31], '30-31')
 #       print('corrected', dcc_correction + d_s[j+27:j+30])
-        dcc = sign * int(dcc_correction + d_s[j+27:j+30],16) / 100
+		dcc = sign * (int(d_s[j+26:j+30],16) - dcc_correction) / 100
 		if dcc == '': dcc=99
 		soc = int(d_s[j+32:j+34],16)
 		if not soc: soc=-1
@@ -83,7 +83,11 @@ def store_data(d_s):
 		#if not v16: v16=0
 
 		record = v01,v02,v03,v04,v05,v06,v07,v08
+		voltages = [v01,v02,v03,v04,v05,v06,v07,v08]
 		print('voltages: ', record)
+		max_value = max(voltages)
+		min_value = min(voltages)
+		avg_value = sum(voltages)/len(voltages)
 		print('t0:', t0,'C')
 		print('t1:', t1,'C')
 		print('t2:', t2,'C')
