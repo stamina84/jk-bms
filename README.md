@@ -30,8 +30,8 @@ cat telegraf.conf
 
 # BLE usage
 
-* `cp ble/jkbm_config.conf.example jkbm_config.conf`
-* Set the value as your need in `jkbm_config.conf`
+* `cp ble/jkbms_config.conf.example jkbms_config.conf`
+* Set the value as your need in `jkbms_config.conf`
 * Crontab settings
 `*  *  *  *  *  root /bin/bash -c /PATH_TO_THIS_DIR/ble/read_jkbms.sh >> /var/log/read_jkbms.log`
 
@@ -40,4 +40,4 @@ cat telegraf.conf
 * `cp easun/easun_config.conf.example easun_config.conf`
 * Set the value as your need in `easun_config.conf`
 * Crontab settings
-  `*  *  *  *  *  root /bin/bash -c /PATH_TO_THIS_DIR/ble/read_jkbms.sh >> /var/log/read_jkbms.log`
+  `*  *  *  *  *  root /bin/bash -c /PATH_TO_THIS_DIR/easun/read_easun.sh >> /var/log/read_easun.log`
