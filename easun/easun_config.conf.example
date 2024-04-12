@@ -24,7 +24,7 @@
 ###   client_id in MQTTIO (using in the command and response topics)
 
 [EasunInverter]
-protocol=PI30MAX
+protocol=PI30
 port=/dev/ttyUSB0
 command=getstatus
 tag=inverter_easun/easun
