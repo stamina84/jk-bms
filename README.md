@@ -1,44 +1,32 @@
-# Telegraf, influxdb config
+# JK-BMS + inverter monitoring
 
-* install influxdb2
-  * `sudo apt install influxdb2`
-  * Restore backup to `/var/lib/influxdb/.influxdbv2` if there is.
-  * Important to not start with `influxd` with root or other user, that will create a new `.influxdbv2` dir in home directory
-  * `sudo service influxdb start`
-  * `sudo systemctl enable influxdb`
-  * `sudo systemctl status influxdb`
-* Create a new bucket `batteries` in influxdb
-* install telegraf
-* configure telegraf
-  * `sudo su`
-  * `cd /etc/telegraf/telegraf.d/`
-  * `touch my_config_telegraf.conf`
-  * `nano my_config_telegraf.conf`
-* Install mpp-solar
-  * Clone jb-blance mpp-solar git repo
-  * Run `pip install mppsolar[ble]`
-  * Pre-re tips:
-    * install python3
-    * `sudo apt-get install python3-pip libglib2.0-dev`
+Reads **JK-BMS** battery packs over BLE and **Easun / SP24** inverters over
+serial, publishes the metrics to MQTT, and stores them in InfluxDB for Grafana
+dashboards.
+
 ```
-telegraf config -input-filter mqtt_consumer -output-filter influxdb_v2 > telegraf.conf
-cat telegraf.conf
+JK-BMS (BLE)  ─┐
+               ├─> collectors ──MQTT──> Telegraf ──> InfluxDB ──> Grafana
+inverters     ─┘   (deploy/)            (server/)
+ (serial)
 ```
 
-# Serial usage
+The repo is split into the two machines involved:
 
-* Open 2 terminal windows
-* terminal #1
-  * run `python3 serial/read_bms.py`
-* terminal #2
-  * run `watch python3 serial/query_bms.py`
+| Dir | Side | What it is |
+|-----|------|------------|
+| **[deploy/](deploy/README.md)** | **client** | Long-running systemd collectors that read the hardware and publish to MQTT — plus install / update / uninstall scripts and a manual serial reader. |
+| **[server/](server/README.md)** | **server** | Telegraf configs and the InfluxDB / Grafana setup that consume MQTT and store/visualise the data. |
 
-# Collecting BMS / inverter data
+(Client and server are often the same physical box, but the configuration is
+kept separate.)
 
-Run the collectors as long-running **systemd services** — auto-start on boot,
-restart-on-crash, journald logging, and configurable sampling for both the
-JK-BMS (BLE) and the inverters (serial).
+## Quick start
 
-See **[deploy/README.md](deploy/README.md)** for the full
-install / update / uninstall guide. The installer prompts for your MQTT broker
-and battery MACs, so no local config lives in this repo.
+- **Collecting data** (the box wired to the batteries/inverters):
+  see **[deploy/README.md](deploy/README.md)**. The installer prompts for your
+  MQTT broker and battery MACs, so no local config lives in this repo.
+- **Storing & charting data** (Telegraf → InfluxDB → Grafana):
+  see **[server/README.md](server/README.md)**.
+- **Manual serial debugging** of a single pack:
+  see **[deploy/serial/README.md](deploy/serial/README.md)**.
