@@ -17,7 +17,9 @@ PORT="${1:?usage: inverter-collector.sh <ttyUSBx>}"
 
 MQTT_BROKER="${MQTT_BROKER:-localhost}"
 PROTOCOL="${PROTOCOL:-PI30}"
-INTERVAL="${INTERVAL:-30}"
+# Per-service interval wins over the shared INTERVAL. Serial reads are fast
+# (~1-2s), so this can be small.
+INTERVAL="${INVERTER_INTERVAL:-${INTERVAL:-5}}"
 
 # Detection table: space-separated "power:name" pairs matched against the
 # AC output active power reported by --getsettings. Override or extend in

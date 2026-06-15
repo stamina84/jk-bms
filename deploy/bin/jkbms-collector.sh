@@ -20,7 +20,9 @@ set -uo pipefail
 
 MQTT_BROKER="${MQTT_BROKER:-localhost}"
 JKBMS_PROTOCOL="${JKBMS_PROTOCOL:-JK02_32}"
-INTERVAL="${INTERVAL:-30}"
+# Per-service interval wins over the shared INTERVAL. BLE reads are slow
+# (~10s per pack, sequential), so this is the practical floor for the BMS.
+INTERVAL="${JKBMS_INTERVAL:-${INTERVAL:-30}}"
 JKBMS="${JKBMS:-}"
 
 # Leveled logging via journald severity prefixes (SyslogLevelPrefix=yes parses

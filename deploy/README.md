@@ -70,20 +70,27 @@ which mpp-solar jkbms      # note the path; defaults assume /usr/local/bin
 
 ## 1. Measure your read times (do this on the box)
 
-`INTERVAL` must be at least the total time to read all devices on a service.
-Measure both:
+Each service has its own interval, so measure both device types:
 
 ```bash
-# Serial inverter read
+# Serial inverter read (typically ~1-2s)
 time mpp-solar -p /dev/ttyUSB0 -P PI30 --getstatus
 
-# BLE BMS read (one battery)
+# BLE BMS read, one battery (typically ~10s — mostly BLE connect overhead)
 time jkbms -P JK02_32 -p AA:BB:CC:DD:EE:01 -c getCellData -o screen
 ```
 
-Typical reads are a few seconds. The BMS service reads every battery in `JKBMS`
-sequentially per cycle, so size `INTERVAL` for the *sum* of those reads plus
-headroom. With ~3–4s reads and two packs, `INTERVAL=30` is comfortable.
+The collector sleeps `interval - read_time` between cycles (1s floor), so an
+interval below the read time just means "read as fast as the hardware allows".
+Tune in `collector.env`:
+
+- **`INVERTER_INTERVAL`** — serial is fast, so `5` (or even `3`) is fine.
+- **`JKBMS_INTERVAL`** — BLE is the bottleneck. The BMS service reads every
+  battery in `JKBMS` *sequentially* (one BLE adapter can't multiplex), so the
+  floor per cycle is roughly `packs × read_time`. With two ~10s packs you're
+  already at ~20s; `JKBMS_INTERVAL=30` (or as low as ~25) is about as fast as it
+  gets — lowering it further won't help.
+- **`INTERVAL`** — shared fallback used when a per-service override is unset.
 
 ## 2. Install
 
