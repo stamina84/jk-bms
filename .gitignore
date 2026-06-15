@@ -2,3 +2,8 @@
 
 jkbm_config.conf
 easun_config.conf
+
+# Local, filled-in collector config (lives in /etc/jk-bms; never commit real
+# broker IPs or BMS MACs). Only collector.env.example is tracked.
+collector.env
+*.local.env

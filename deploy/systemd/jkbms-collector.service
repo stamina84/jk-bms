@@ -1,0 +1,23 @@
+[Unit]
+Description=JK-BMS MQTT collector (BLE)
+Documentation=https://github.com/your-org/jk-bms
+After=network-online.target bluetooth.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Reads every battery in JKBMS (collector.env) sequentially in one loop, so BLE
+# connections never overlap. `jkbms` is resolved via PATH from collector.env.
+EnvironmentFile=-/etc/jk-bms/collector.env
+ExecStart=/opt/jk-bms/bin/jkbms-collector.sh
+Restart=always
+RestartSec=15
+User=root
+# Logs go to the journal, tagged "jkbms". Read with: journalctl -t jkbms
+SyslogIdentifier=jkbms
+# Cap log floods from a crash loop (per service).
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

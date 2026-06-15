@@ -1,6 +1,8 @@
 #!/usr/bin/bash
 
 INPUT_NAME="$1"
+# Set MQTT_BROKER in the environment (e.g. export MQTT_BROKER=10.0.0.5).
+MQTT_BROKER="${MQTT_BROKER:-localhost}"
 ACTIVE_POWER=$(mpp-solar -p /dev/${INPUT_NAME} -P PI30 --getsettings | grep ac_output_active_power)
 #echo "${ACTIVE_POWER}"
 
@@ -20,7 +22,7 @@ done
 
 if [ ! "$INVERTER" = "" ]; then
   #echo "${INVERTER}"
-  COMMAND="mpp-solar -p /dev/${INPUT_NAME} -P PI30 --getstatus  -q 192.168.10.4 -T inverter/${INVERTER} -o json_mqtt"
+  COMMAND="mpp-solar -p /dev/${INPUT_NAME} -P PI30 --getstatus  -q ${MQTT_BROKER} -T inverter/${INVERTER} -o json_mqtt"
   #echo "$COMMAND"
   eval "$COMMAND"
   sleep 25

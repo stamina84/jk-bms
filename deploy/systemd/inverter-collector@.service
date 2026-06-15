@@ -1,0 +1,24 @@
+[Unit]
+Description=Inverter MQTT collector on /dev/%i
+Documentation=https://github.com/your-org/jk-bms
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Templated unit: %i is the serial port, e.g. enable with
+#   systemctl enable --now inverter-collector@ttyUSB0
+#   systemctl enable --now inverter-collector@ttyUSB1
+EnvironmentFile=-/etc/jk-bms/collector.env
+ExecStart=/opt/jk-bms/bin/inverter-collector.sh %i
+Restart=always
+RestartSec=10
+User=root
+# Logs go to the journal, tagged "inverter-<port>" e.g. inverter-ttyUSB0.
+SyslogIdentifier=inverter-%i
+# Cap log floods from a crash loop (per service).
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target
