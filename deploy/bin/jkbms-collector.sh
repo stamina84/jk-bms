@@ -27,6 +27,10 @@ INTERVAL="${JKBMS_INTERVAL:-${INTERVAL:-30}}"
 # out-of-range pack) can't stall the loop and starve the other batteries.
 # Should be comfortably above a normal read (~10s).
 READ_TIMEOUT="${JKBMS_READ_TIMEOUT:-25}"
+# Seconds to let the BLE adapter settle after each read. jkbms/bleak does not
+# always tear the connection down cleanly; a lingering link makes the *next*
+# battery's connect fail fast with rc=1, so we explicitly disconnect and pause.
+SETTLE_DELAY="${JKBMS_SETTLE_DELAY:-2}"
 JKBMS="${JKBMS:-}"
 
 # Leveled logging via journald severity prefixes (SyslogLevelPrefix=yes parses
@@ -52,6 +56,11 @@ while true; do
     elif (( rc != 0 )); then
       warn "read failed (rc=${rc}) for ${name} (${mac}, ${proto})"
     fi
+
+    # Drop any lingering BLE connection so the next battery starts clean, then
+    # let the adapter settle. Without this the next connect can fail with rc=1.
+    bluetoothctl disconnect "$mac" >/dev/null 2>&1 || true
+    (( SETTLE_DELAY > 0 )) && sleep "$SETTLE_DELAY"
   done
 
   elapsed=$(( $(date +%s) - start ))
