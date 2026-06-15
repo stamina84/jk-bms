@@ -33,25 +33,12 @@ cat telegraf.conf
 * terminal #2
   * run `watch python3 serial/query_bms.py`
 
-# Running as systemd services (recommended)
+# Collecting BMS / inverter data
 
-Instead of the cron jobs below, you can run the collectors as long-running
-systemd services (auto-start, restart-on-crash, journald logs, no cron
-one-minute limit). See [deploy/README.md](deploy/README.md).
+Run the collectors as long-running **systemd services** — auto-start on boot,
+restart-on-crash, journald logging, and configurable sampling for both the
+JK-BMS (BLE) and the inverters (serial).
 
-# BLE usage
-
-* `cp ble/jkbms_config.conf.example jkbms_config.conf`
-* Set the value as your need in `jkbms_config.conf`
-* Crontab settings
-* `sudo nano /etc/crontab`
-`*  *  *  *  *  root /bin/bash -c /PATH_TO_THIS_DIR/ble/read_jkbms.sh >> /var/log/read_jkbms.log`
-
-# Inverter usage
-
-* `cp easun/easun_config.conf.example easun_config.conf`
-  * TODO ignore the input path
-* Set the value as your need in `easun_config.conf`
-* Crontab settings
-* `sudo nano /etc/crontab`
-  * `*  *  *  *  *  root /bin/bash -c "/PATH_TO_THIS_DIR/read_inverter.sh ttyUSB0" >> /var/log/read_inverter_usb0.log`
+See **[deploy/README.md](deploy/README.md)** for the full
+install / update / uninstall guide. The installer prompts for your MQTT broker
+and battery MACs, so no local config lives in this repo.
