@@ -23,6 +23,10 @@ JKBMS_PROTOCOL="${JKBMS_PROTOCOL:-JK02_32}"
 # Per-service interval wins over the shared INTERVAL. BLE reads are slow
 # (~10s per pack, sequential), so this is the practical floor for the BMS.
 INTERVAL="${JKBMS_INTERVAL:-${INTERVAL:-30}}"
+# Hard cap on a single battery read so a hung BLE connection (e.g. a dead or
+# out-of-range pack) can't stall the loop and starve the other batteries.
+# Should be comfortably above a normal read (~10s).
+READ_TIMEOUT="${JKBMS_READ_TIMEOUT:-25}"
 JKBMS="${JKBMS:-}"
 
 # Leveled logging via journald severity prefixes (SyslogLevelPrefix=yes parses
@@ -41,9 +45,12 @@ while true; do
   for entry in $JKBMS; do
     IFS='=' read -r mac name proto <<< "$entry"
     proto="${proto:-$JKBMS_PROTOCOL}"
-    if ! jkbms -P "$proto" -p "$mac" -c getCellData \
-          -q "$MQTT_BROKER" -T "battery/${name}" -o json_mqtt; then
-      warn "read failed for ${name} (${mac}, ${proto})"
+    timeout "$READ_TIMEOUT" jkbms -P "$proto" -p "$mac" -c getCellData \
+      -q "$MQTT_BROKER" -T "battery/${name}" -o json_mqtt && rc=0 || rc=$?
+    if (( rc == 124 )); then
+      warn "read timed out (>${READ_TIMEOUT}s) for ${name} (${mac}, ${proto})"
+    elif (( rc != 0 )); then
+      warn "read failed (rc=${rc}) for ${name} (${mac}, ${proto})"
     fi
   done
 
