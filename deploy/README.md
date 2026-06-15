@@ -210,8 +210,10 @@ disk, `30day` max age — far more than the 24h you need. Check usage with
 ## Updating later
 
 `install.sh` is idempotent: it refreshes the collector script and unit files,
-**never overwrites** `/etc/jk-bms/collector.env`, and
-restarts any services that are currently running. So to ship changes:
+**never changes existing values** in `/etc/jk-bms/collector.env` (it only
+*appends* new default settings introduced by an update, so freshly-added knobs
+show up without clobbering your config), and restarts any services that are
+currently running. So to ship changes:
 
 ```bash
 cd /path/to/jk-bms

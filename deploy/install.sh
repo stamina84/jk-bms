@@ -44,6 +44,7 @@ ln -sf "$BIN_DIR/collector-logs.sh" /usr/local/bin/jk-bms-logs
 # --- Shared env: collect local values, then fill the template -----------------
 # MQTT_BROKER and JKBMS come from the environment if set (non-interactive),
 # otherwise we prompt. An existing, edited file is never overwritten.
+env_changed=0
 if [[ ! -f "$ETC_DIR/collector.env" ]]; then
   JKBMS_DEFAULT_PROTO=JK02_32
   broker="${MQTT_BROKER:-}"
@@ -89,6 +90,36 @@ if [[ ! -f "$ETC_DIR/collector.env" ]]; then
   echo "Created $ETC_DIR/collector.env (broker=$broker)"
 else
   echo "Kept existing $ETC_DIR/collector.env"
+  # Non-destructively add any KEY= settings present in the example but not yet
+  # in the live file (tunables added in a later release). Existing keys and
+  # their values are never touched; placeholder lines (__FOO__) are skipped.
+  # Each new key carries over its immediately-preceding comment block.
+  to_append=""
+  added=()
+  comment_buf=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
+      comment_buf+="${line}"$'\n'; continue
+    fi
+    if [[ -z "${line//[[:space:]]/}" ]]; then
+      comment_buf=""; continue
+    fi
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ "$line" != *__*__* ]] && ! grep -q "^${key}=" "$ETC_DIR/collector.env"; then
+        to_append+="${comment_buf}${line}"$'\n'
+        added+=("$key")
+      fi
+    fi
+    comment_buf=""
+  done < "$SRC_DIR/collector.env.example"
+
+  if (( ${#added[@]} )); then
+    printf '\n# --- settings added by install.sh (new defaults) ---\n%s' "$to_append" \
+      >> "$ETC_DIR/collector.env"
+    echo "Added new settings to collector.env: ${added[*]}"
+    env_changed=1
+  fi
 fi
 
 # --- systemd units ------------------------------------------------------------
@@ -125,10 +156,15 @@ for unit in "${ACTIVE_UNITS[@]:-}"; do
 done
 
 if [[ "$restarted" -eq 1 ]]; then
+  if [[ "$env_changed" -eq 1 ]]; then
+    cfg_note="New default settings were appended to $ETC_DIR/collector.env (existing values kept)."
+  else
+    cfg_note="Config files were left untouched."
+  fi
   cat <<EOF
 
 Update applied: code/units refreshed and running services restarted.
-Config files were left untouched. Check the logs:
+$cfg_note Check the logs:
   journalctl -u jkbms-collector -u 'inverter-collector@*' -n 50 --no-pager
 EOF
   exit 0
