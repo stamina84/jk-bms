@@ -246,27 +246,37 @@ def main():
         err(f"cannot open /dev/{PORT}: {e}")
         sys.exit(1)
 
-    while True:
-        start = time.monotonic()
-        try:
-            frame = read_frame(ser)
-            if frame is None:
-                warn(f"no frame within {READ_TIMEOUT}s on /dev/{PORT}")
-            else:
-                data = parse_frame(frame)
-                if not data.get("voltage_cell01"):
-                    warn(f"frame parsed but no cell data on /dev/{PORT} "
-                        f"({len(frame)} bytes) -- wrong protocol/mode?")
-                elif DEBUG:
-                    print_debug(data)
+    try:
+        while True:
+            start = time.monotonic()
+            try:
+                frame = read_frame(ser)
+                if frame is None:
+                    warn(f"no frame within {READ_TIMEOUT}s on /dev/{PORT}")
                 else:
-                    client.publish(TOPIC, json.dumps(data), qos=0)
-        except Exception as e:  # keep the loop alive across transient errors
-            warn(f"read/parse error on /dev/{PORT}: {e}")
+                    data = parse_frame(frame)
+                    if not data.get("voltage_cell01"):
+                        warn(f"frame parsed but no cell data on /dev/{PORT} "
+                             f"({len(frame)} bytes) -- wrong protocol/mode?")
+                    elif DEBUG:
+                        print_debug(data)
+                    else:
+                        client.publish(TOPIC, json.dumps(data), qos=0)
+            except Exception as e:  # keep the loop alive across transient errors
+                warn(f"read/parse error on /dev/{PORT}: {e}")
 
-        remainder = INTERVAL - (time.monotonic() - start)
-        if remainder > 0:
-            time.sleep(remainder)
+            remainder = INTERVAL - (time.monotonic() - start)
+            if remainder > 0:
+                time.sleep(remainder)
+    except KeyboardInterrupt:
+        # Ctrl-C on a manual/debug run: exit quietly instead of dumping a
+        # traceback. systemd stops the service with SIGTERM, which is silent.
+        notice("interrupted -- stopping")
+    finally:
+        ser.close()
+        if client is not None:
+            client.loop_stop()
+            client.disconnect()
 
 if __name__ == "__main__":
     main()
