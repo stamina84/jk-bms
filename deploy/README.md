@@ -119,6 +119,23 @@ If it warns `no frame` or `no cell data`, re-check wiring / swap A/B and confirm
 UART1 is on `000 - 4G-GPS`. Once you see sane cell voltages, enable the service
 (below).
 
+> **Gotcha — the phone app silences RS485.** While the JK Bluetooth app is
+> connected to the BMS, the pack stops answering on the RS485 port, so the
+> collector logs `no frame within …s`. Fully exit the app (drop the BLE
+> connection) and the reads resume. Expect a few of these warnings whenever you
+> check the BMS from your phone — they are harmless.
+>
+> The other thing that bit us: a **not-fully-seated RJ45** in the BMS gives the
+> same silent `len: 0` symptom. Re-seat it until it clicks.
+
+Symptom cheat-sheet from the raw poll (`len:` of the reply):
+
+| Result | Meaning |
+|--------|---------|
+| `len: 295` (`4e57…`) | working |
+| `len: 0` | correct wiring, but BMS not answering → wrong UART1 mode, phone app connected, or loose RJ45 |
+| `len: 1` (`00`) | A/B swapped — only the TX-turnaround artifact comes back |
+
 ## Prerequisites
 
 `mpp-solar` and `jkbms` must be installed and on root's PATH (the services

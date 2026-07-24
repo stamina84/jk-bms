@@ -117,10 +117,18 @@ def read_frame(ser):
     total frame = length + 2. Skips the request echo and any short/garbage
     frame."""
     ser.reset_input_buffer()
-    ser.write(REQUEST)
     deadline = time.monotonic() + READ_TIMEOUT
     buf = bytearray()
+    next_poll = 0.0
     while time.monotonic() < deadline:
+        # (Re)send the poll about once a second, but ONLY while the line has
+        # been completely silent: a single lost request would otherwise waste
+        # the whole window. Re-polling once bytes are arriving would collide
+        # with the in-flight reply on the half-duplex bus.
+        now = time.monotonic()
+        if not buf and now >= next_poll:
+            ser.write(REQUEST)
+            next_poll = now + 1.0
         chunk = ser.read(320)
         if chunk:
             buf.extend(chunk)
