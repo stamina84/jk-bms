@@ -33,8 +33,9 @@
 #   JKPB_BAUD          serial baud (default 115200)
 #   JKPB_INTERVAL      seconds between reads (default 30; falls back to INTERVAL)
 #   JKPB_READ_TIMEOUT  seconds to wait for a full frame (default 5)
-#   JKPB_CAPACITY_AH   nominal pack capacity in Ah; if set, capacity_remain and
-#                      nominal_capacity are reported (SOC-derived). Blank = omit.
+#   JKPB_CAPACITY_AH   FALLBACK rated pack capacity in Ah. The capacity is read
+#                      from the frame (register 0xAA) and always wins; this is
+#                      only used if the firmware doesn't report it. Blank = omit.
 #   DEBUG              1 (or --debug) for read-only screen output, no MQTT.
 
 import json
@@ -101,6 +102,16 @@ REG_SIZES = {
     0x8B: 2,  # warning/alarm bitmask
     0x8C: 2,  # status bitmask (charge/discharge/balance MOS)
 }
+# Settings block (0x8E..0xAA). We publish none of these, but we need their sizes
+# to walk past them and reach the rated pack capacity at 0xAA. Sizes verified
+# against a real 16S JK-PB frame; the walk stops at the first unknown id, so a
+# firmware that inserts a different register simply loses the capacity field.
+REG_SIZES.update({
+    0x8E: 2, 0x8F: 2, 0x90: 2, 0x91: 2, 0x92: 2, 0x93: 2, 0x94: 2, 0x95: 2,
+    0x96: 2, 0x97: 2, 0x98: 2, 0x99: 2, 0x9A: 2, 0x9B: 2, 0x9C: 2, 0x9D: 1,
+    0x9E: 2, 0x9F: 2, 0xA0: 2, 0xA1: 2, 0xA2: 2, 0xA3: 2, 0xA4: 2, 0xA5: 2,
+    0xA6: 2, 0xA7: 2, 0xA8: 2, 0xA9: 1, 0xAA: 4,
+})
 
 def _temp(raw):
     # JK NW temperature encoding: 0..100 = 0..100 C; >100 = negative.
@@ -188,9 +199,13 @@ def parse_frame(frame):
         elif reg == 0x87: d["cycle_count"] = raw
         elif reg == 0x89: d["cycle_capacity"] = round(raw / 1000.0, 2)
         elif reg == 0x8B: d["_warnings"] = raw
-        elif reg == 0x8C:
-            d["_status"] = raw
-            break  # all dynamic values collected
+        elif reg == 0x8C: d["_status"] = raw
+        elif reg == 0xAA:
+            # Rated pack capacity (Ah). Sanity-check it: if the settings-block
+            # walk ever desynced, a wild value must not reach the metrics.
+            if 1 <= raw <= 2000:
+                d["nominal_capacity"] = raw
+            break  # last field we publish -- skip the rest of the frame
 
     # --- derived, cell-based fields ------------------------------------------
     for n, v in enumerate(cells, start=1):
@@ -201,14 +216,23 @@ def parse_frame(frame):
 
     # --- derived, current/power/capacity -------------------------------------
     current = d.pop("_current", None)
-    if current is not None and "battery_voltage" in d:
+    if current is not None:
+        # Signed current: + charging, - discharging (= charge - discharge).
         # `or 0.0` / the >0/<0 guards avoid a cosmetic -0.0 when current is 0 A.
-        d["battery_power"] = round(d["battery_voltage"] * current, 2) or 0.0
+        d["current"] = round(current, 2) or 0.0
         d["current_charge"] = round(current, 2) if current > 0 else 0.0
         d["current_discharge"] = round(-current, 2) if current < 0 else 0.0
-    if CAPACITY_AH and "percent_remain" in d:
-        d["nominal_capacity"] = CAPACITY_AH
-        d["capacity_remain"] = round(d["percent_remain"] / 100.0 * CAPACITY_AH, 2)
+        if "battery_voltage" in d:
+            d["battery_power"] = round(d["battery_voltage"] * current, 2) or 0.0
+
+    # Rated capacity comes from the frame (0xAA). JKPB_CAPACITY_AH is only a
+    # fallback for firmware that doesn't report it, so the measured value always
+    # wins and no configured figure has to be undone later.
+    cap = d.get("nominal_capacity") or CAPACITY_AH
+    if cap:
+        d["nominal_capacity"] = cap
+        if "percent_remain" in d:
+            d["capacity_remain"] = round(d["percent_remain"] / 100.0 * cap, 2)
 
     return d
 
@@ -220,7 +244,7 @@ def print_debug(d):
     for k in cellkeys:
         print(f"  {k:22s} {d[k]:.3f} V")
     for k in ("average_cell_voltage", "delta_cell_voltage", "battery_voltage",
-              "current_charge", "current_discharge", "battery_power",
+              "current", "current_charge", "current_discharge", "battery_power",
               "percent_remain", "cycle_count", "cycle_capacity",
               "mos_temp", "battery_t1", "battery_t2",
               "capacity_remain", "nominal_capacity", "_warnings", "_status"):

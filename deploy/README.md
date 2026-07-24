@@ -98,8 +98,25 @@ Config lives in `collector.env`:
 JKPB_NAME=jkpb            # -> topic battery/jkpb/mpp-solar (per-port override: JKPB_ttyUSB2=pb1)
 JKPB_BAUD=115200
 JKPB_INTERVAL=30
-#JKPB_CAPACITY_AH=280     # optional: enables nominal_capacity + capacity_remain
+#JKPB_CAPACITY_AH=314     # fallback only -- the rated capacity is read from the BMS
 ```
+
+Published fields (flat JSON, mpp-solar names so `battery.conf` renames apply):
+
+| Field | Notes |
+|-------|-------|
+| `voltage_cell01…NN` | one per cell (16 on a PB pack) |
+| `average_cell_voltage`, `delta_cell_voltage` | computed over **all** cells |
+| `battery_voltage`, `battery_power` | pack V / signed W |
+| `current` | **signed** — `+` charging, `−` discharging |
+| `current_charge`, `current_discharge` | one-sided magnitudes (`Ain` / `Aout`) |
+| `percent_remain` | SOC % |
+| `nominal_capacity`, `capacity_remain` | rated Ah read from the BMS (reg `0xAA`) and the SOC-derived remainder → `Ah_capacity` / `Ah_remain` |
+| `cycle_count`, `cycle_capacity` | |
+| `mos_temp`, `battery_t1`, `battery_t2` | °C |
+
+`current` has no rename in `battery.conf` yet — add `current = "A"` to its
+`renames` block if you want it charted as `A`.
 
 > **16S note:** a PB pack has 16 cells, so it also reports
 > `voltage_cell09..16`. `battery.conf` currently *excludes* those (the BLE packs
