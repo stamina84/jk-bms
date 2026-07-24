@@ -194,9 +194,10 @@ def parse_frame(frame):
     # --- derived, current/power/capacity -------------------------------------
     current = d.pop("_current", None)
     if current is not None and "battery_voltage" in d:
-        d["battery_power"] = round(d["battery_voltage"] * current, 2)
-        d["current_charge"] = round(max(current, 0.0), 2)
-        d["current_discharge"] = round(max(-current, 0.0), 2)
+        # `or 0.0` / the >0/<0 guards avoid a cosmetic -0.0 when current is 0 A.
+        d["battery_power"] = round(d["battery_voltage"] * current, 2) or 0.0
+        d["current_charge"] = round(current, 2) if current > 0 else 0.0
+        d["current_discharge"] = round(-current, 2) if current < 0 else 0.0
     if CAPACITY_AH and "percent_remain" in d:
         d["nominal_capacity"] = CAPACITY_AH
         d["capacity_remain"] = round(d["percent_remain"] / 100.0 * CAPACITY_AH, 2)
