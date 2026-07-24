@@ -1,0 +1,27 @@
+[Unit]
+Description=JK inverter-BMS MQTT collector on /dev/%i (RS485)
+Documentation=https://github.com/your-org/jk-bms
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Templated unit: %i is the serial port, e.g. enable with
+#   systemctl enable --now jkpb-collector@ttyUSB2
+# Reads the JK inverter BMS (PB series) over RS485 (native 4E57 protocol) and
+# publishes to battery/<name>/mpp-solar. Needs python3 + pyserial + paho-mqtt
+# (the latter two ship with mpp-solar); python3 is resolved via PATH from
+# collector.env.
+EnvironmentFile=-/etc/jk-bms/collector.env
+ExecStart=/opt/jk-bms/bin/jkpb-collector.py %i
+Restart=always
+RestartSec=10
+User=root
+# Logs go to the journal, tagged "jkpb-<port>" e.g. jkpb-ttyUSB2.
+SyslogIdentifier=jkpb-%i
+# Cap log floods from a crash loop (per service).
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

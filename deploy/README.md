@@ -25,6 +25,12 @@ adapter can't multiplex connections) and for the exclusive serial ports.
 - Each inverter is a separate **instance** of the templated service on its own
   port (`ttyUSB0`, `ttyUSB1`, …), so they don't contend with each other. Enable
   one for a single inverter, or several for multiple.
+- **JK *inverter* BMS (RS485):** `jkpb-collector.py <port>` reads a PB-series
+  inverter BMS over a USB-RS485 adapter (native `4E57` protocol, not mpp-solar)
+  and publishes to `battery/<name>/mpp-solar` — the same schema and topic as the
+  BLE packs. Also a templated per-port service (`jkpb-collector@ttyUSB2`). It has
+  a **read-only debug mode** that decodes to the screen without touching MQTT
+  (see below).
 
 ### Configuring which inverters exist
 
@@ -58,6 +64,61 @@ batteries shares the single BLE adapter without overlapping. The optional third
 field sets a per-battery protocol for mixed-firmware setups, e.g.
 `AA:BB:CC:DD:EE:02=JKBMS2=JK02`.
 
+### Configuring the JK *inverter* BMS (RS485 serial)
+
+The inverter BMS (PB series, e.g. the 150A `JK-PB2A16S15P` v19) is **not** read
+over BLE — it exposes its full native data on the **RS485-1** port, which is a
+*true differential RS485* interface (not the TTL "GPS" port of the BD packs). So
+it needs a **USB-RS485 adapter**, not a USB-TTL one.
+
+Wiring (RS485-1 = the leftmost RJ45 on the BMS), T568B colours:
+
+| RJ45 pin | T568B wire | JK signal | Adapter |
+|----------|-----------|-----------|---------|
+| 2 | orange | RS485-A | A / D+ |
+| 1 | white-orange | RS485-B | B / D− |
+| 3 | white-green | GND | GND |
+
+(A is also on pin 7, B on pin 8, GND on pin 6 — one wire each is enough. If no
+data appears, swap A/B.) In the JK app set **UART1 → `000 - 4G-GPS Common
+protocol V4.2`** so the port emits the native `4E57` frames. The **CAN port is
+left untouched** for the inverter link — this path is RS485 only.
+
+Unlike the BLE packs, this is **not** read by mpp-solar (whose JK protocols use
+different framing). It has a dedicated Python collector,
+[`jkpb-collector.py`](bin/jkpb-collector.py), that speaks the native `4E57`
+protocol directly, decodes any cell count plus all scalars, and publishes a flat
+JSON payload to `battery/<name>/mpp-solar` — the **same topic and schema** the
+BLE `jkbms -o json_mqtt` collector emits, so `battery.conf` consumes it with no
+server-side change.
+
+Config lives in `collector.env`:
+
+```ini
+JKPB_NAME=jkpb            # -> topic battery/jkpb/mpp-solar (per-port override: JKPB_ttyUSB2=pb1)
+JKPB_BAUD=115200
+JKPB_INTERVAL=30
+#JKPB_CAPACITY_AH=280     # optional: enables nominal_capacity + capacity_remain
+```
+
+> **16S note:** a PB pack has 16 cells, so it also reports
+> `voltage_cell09..16`. `battery.conf` currently *excludes* those (the BLE packs
+> are 8S) — remove them from its `excluded_keys` to chart all 16 in Grafana.
+
+**Debug mode (read-only, never publishes).** Before enabling the service,
+smoke-test the wiring. This only prints the decoded values to the screen — it
+does **not** send anything to MQTT:
+
+```bash
+# either form works
+DEBUG=1 /opt/jk-bms/bin/jkpb-collector.py ttyUSB2
+/opt/jk-bms/bin/jkpb-collector.py ttyUSB2 --debug
+```
+
+If it warns `no frame` or `no cell data`, re-check wiring / swap A/B and confirm
+UART1 is on `000 - 4G-GPS`. Once you see sane cell voltages, enable the service
+(below).
+
 ## Prerequisites
 
 `mpp-solar` and `jkbms` must be installed and on root's PATH (the services
@@ -66,6 +127,14 @@ resolve them via the `PATH` set in `collector.env`):
 ```bash
 pip install mppsolar[ble]
 which mpp-solar jkbms      # note the path; defaults assume /usr/local/bin
+```
+
+The RS485 inverter-BMS collector (`jkpb-collector.py`) additionally needs
+`python3` and the `pyserial` + `paho-mqtt` modules — both are pulled in by
+`mppsolar`, so a normal install already has them. Verify with:
+
+```bash
+python3 -c "import serial, paho.mqtt.client"   # no output = OK
 ```
 
 ## 1. Measure your read times (do this on the box)
@@ -113,11 +182,13 @@ missing is a hard error. This installs:
 | Path | What |
 |------|------|
 | `/opt/jk-bms/bin/inverter-collector.sh` | inverter loop script |
-| `/opt/jk-bms/bin/jkbms-collector.sh` | JK-BMS loop script |
+| `/opt/jk-bms/bin/jkbms-collector.sh` | JK-BMS loop script (BLE) |
+| `/opt/jk-bms/bin/jkpb-collector.py` | JK inverter-BMS loop script (RS485, native 4E57) |
 | `/opt/jk-bms/bin/collector-logs.sh` → `/usr/local/bin/jk-bms-logs` | combined log viewer |
 | `/etc/jk-bms/collector.env` | shared config, filled by installer, mode `0640` (broker, MACs, inverter map, `INTERVAL`, PATH) |
-| `/etc/systemd/system/jkbms-collector.service` | BMS service |
+| `/etc/systemd/system/jkbms-collector.service` | BMS service (BLE) |
 | `/etc/systemd/system/inverter-collector@.service` | templated inverter service |
+| `/etc/systemd/system/jkpb-collector@.service` | templated JK inverter-BMS service (RS485) |
 | `/etc/systemd/journald.conf.d/10-jk-bms.conf` | journal retention caps (system-wide) |
 
 An existing `collector.env` is never overwritten.
@@ -147,6 +218,8 @@ Edit `/etc/crontab` and delete the three lines:
 systemctl enable --now jkbms-collector
 systemctl enable --now inverter-collector@ttyUSB0
 systemctl enable --now inverter-collector@ttyUSB1
+# JK inverter BMS over RS485 (smoke-test read-only first — see the RS485 section):
+systemctl enable --now jkpb-collector@ttyUSB2
 ```
 
 ## 6. Verify
@@ -164,8 +237,9 @@ flowing into Telegraf → InfluxDB → Grafana.
 ## Logs
 
 Everything goes to the systemd journal — no log files. Services are tagged via
-`SyslogIdentifier`: `jkbms` for the BMS, `inverter-<port>` (e.g.
-`inverter-ttyUSB0`) for each inverter.
+`SyslogIdentifier`: `jkbms` for the BLE BMS, `inverter-<port>` (e.g.
+`inverter-ttyUSB0`) for each inverter, `jkpb-<port>` (e.g. `jkpb-ttyUSB2`) for
+the RS485 inverter BMS.
 
 **Quick combined view across all devices** — `install.sh` puts `jk-bms-logs` on
 your PATH (may need `sudo` to read the system journal):

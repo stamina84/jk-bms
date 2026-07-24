@@ -1,14 +1,13 @@
 # JK-BMS + inverter monitoring
 
-Reads **JK-BMS** battery packs over BLE and **Easun / SP24** inverters over
-serial, publishes the metrics to MQTT, and stores them in InfluxDB for Grafana
-dashboards.
+Reads **JK-BMS** battery packs over BLE, the **JK inverter BMS** (PB series) over
+RS485, and **Easun / SP24** inverters over serial, publishes the metrics to MQTT,
+and stores them in InfluxDB for Grafana dashboards.
 
 ```
-JK-BMS (BLE)  ─┐
-               ├─> collectors ──MQTT──> Telegraf ──> InfluxDB ──> Grafana
-inverters     ─┘   (deploy/)            (server/)
- (serial)
+JK-BMS (BLE)          ─┐
+JK inverter BMS (RS485)├─> collectors ──MQTT──> Telegraf ──> InfluxDB ──> Grafana
+inverters (serial)    ─┘   (deploy/)            (server/)
 ```
 
 The repo is split into the two machines involved:

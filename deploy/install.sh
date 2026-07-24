@@ -29,6 +29,15 @@ for bin in jkbms mpp-solar; do
     echo "WARNING: '$bin' not found on PATH. Install with: pip install mppsolar[ble]" >&2
   fi
 done
+# The JK inverter-BMS (RS485) collector is a Python script; it needs python3 and
+# the pyserial + paho-mqtt modules (both ship with mpp-solar). Warn if missing.
+if command -v python3 >/dev/null; then
+  python3 - <<'PY' 2>/dev/null || echo "WARNING: python modules 'pyserial'/'paho-mqtt' missing (needed only for jkpb-collector). Install with: pip install pyserial paho-mqtt" >&2
+import serial, paho.mqtt.client  # noqa
+PY
+else
+  echo "WARNING: python3 not found (needed only for the jkpb-collector RS485 service)." >&2
+fi
 
 # --- Directories --------------------------------------------------------------
 install -d -m 0755 "$ETC_DIR" "$BIN_DIR"
@@ -36,6 +45,7 @@ install -d -m 0755 "$ETC_DIR" "$BIN_DIR"
 # --- Collector scripts --------------------------------------------------------
 install -m 0755 "$SRC_DIR/bin/inverter-collector.sh" "$BIN_DIR/inverter-collector.sh"
 install -m 0755 "$SRC_DIR/bin/jkbms-collector.sh"    "$BIN_DIR/jkbms-collector.sh"
+install -m 0755 "$SRC_DIR/bin/jkpb-collector.py"     "$BIN_DIR/jkpb-collector.py"
 install -m 0755 "$SRC_DIR/bin/collector-logs.sh"     "$BIN_DIR/collector-logs.sh"
 
 # Handy combined log viewer on PATH: `jk-bms-logs`
@@ -125,6 +135,7 @@ fi
 # --- systemd units ------------------------------------------------------------
 install -m 0644 "$SRC_DIR/systemd/jkbms-collector.service"     "$UNIT_DIR/jkbms-collector.service"
 install -m 0644 "$SRC_DIR/systemd/inverter-collector@.service" "$UNIT_DIR/inverter-collector@.service"
+install -m 0644 "$SRC_DIR/systemd/jkpb-collector@.service"     "$UNIT_DIR/jkpb-collector@.service"
 
 # --- journal retention (system-wide drop-in) ---------------------------------
 JOURNALD_DROPIN=/etc/systemd/journald.conf.d/10-jk-bms.conf
@@ -145,7 +156,7 @@ systemctl daemon-reload
 restarted=0
 mapfile -t ACTIVE_UNITS < <(
   systemctl list-units --type=service --state=running --no-legend \
-    'jkbms-collector.service' 'inverter-collector@*.service' 2>/dev/null \
+    'jkbms-collector.service' 'inverter-collector@*.service' 'jkpb-collector@*.service' 2>/dev/null \
     | awk '{print $1}'
 )
 for unit in "${ACTIVE_UNITS[@]:-}"; do
@@ -184,6 +195,10 @@ Installed. Next steps:
        systemctl enable --now jkbms-collector
        systemctl enable --now inverter-collector@ttyUSB0
        systemctl enable --now inverter-collector@ttyUSB1
+     JK inverter BMS over RS485 (PB series), once you know its port -- but
+     smoke-test it read-only first (does NOT publish to MQTT):
+       DEBUG=1 /opt/jk-bms/bin/jkpb-collector.py ttyUSB2
+       systemctl enable --now jkpb-collector@ttyUSB2
 
   4. Watch the logs (combined across all devices):
        jk-bms-logs -f                 # live

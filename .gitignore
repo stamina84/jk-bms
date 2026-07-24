@@ -1,5 +1,9 @@
 .idea
 
+# Python bytecode (jkpb-collector.py)
+__pycache__/
+*.pyc
+
 jkbm_config.conf
 easun_config.conf
 
