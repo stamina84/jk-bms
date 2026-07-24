@@ -60,10 +60,14 @@ if [[ ! -f "$ETC_DIR/collector.env" ]]; then
   broker="${MQTT_BROKER:-}"
   jkbms_list="${JKBMS:-}"
 
-  if [[ ( -z "$broker" || -z "$jkbms_list" ) && ! -t 0 ]]; then
-    echo "ERROR: collector.env needs MQTT_BROKER and JKBMS." >&2
-    echo "For a non-interactive install, pass them in the environment:" >&2
-    echo "  sudo env MQTT_BROKER=10.0.0.5 JKBMS='AA:BB:CC:DD:EE:01=JKBMS1' $0" >&2
+  # Only the broker is mandatory. The BLE pack list (JKBMS) is optional, so a
+  # box that only has an RS485 inverter BMS -- or only inverters -- installs
+  # fine; you simply don't enable jkbms-collector there.
+  if [[ -z "$broker" && ! -t 0 ]]; then
+    echo "ERROR: collector.env needs MQTT_BROKER." >&2
+    echo "For a non-interactive install, pass it in the environment:" >&2
+    echo "  sudo env MQTT_BROKER=10.0.0.5 $0" >&2
+    echo "Optionally add BLE packs: JKBMS='AA:BB:CC:DD:EE:01=JKBMS1'" >&2
     exit 1
   fi
 
@@ -71,8 +75,9 @@ if [[ ! -f "$ETC_DIR/collector.env" ]]; then
     read -rp "MQTT broker host/IP: " broker || true
   done
 
-  if [[ -z "$jkbms_list" ]]; then
-    echo "Enter JK-BMS batteries (blank MAC to finish):"
+  if [[ -z "$jkbms_list" && -t 0 ]]; then
+    echo "Enter JK-BMS packs read over BLE (blank MAC to finish)."
+    echo "Leave empty if this box only has an RS485 inverter BMS / inverters:"
     list=(); n=1
     while :; do
       read -rp "  battery #$n MAC: " mac || break
@@ -88,11 +93,12 @@ if [[ ! -f "$ETC_DIR/collector.env" ]]; then
     jkbms_list="${list[*]}"
   fi
 
-  [[ -n "$jkbms_list" ]] || { echo "ERROR: at least one battery is required" >&2; exit 1; }
   for entry in $jkbms_list; do
     valid_mac "${entry%%=*}" \
       || { echo "ERROR: invalid MAC in JKBMS: '${entry%%=*}'" >&2; exit 1; }
   done
+  [[ -n "$jkbms_list" ]] \
+    || echo "No BLE packs given -- JKBMS left empty; don't enable jkbms-collector here."
 
   sed -e "s#__MQTT_BROKER__#${broker}#g" -e "s#__JKBMS__#${jkbms_list}#g" \
     "$SRC_DIR/collector.env.example" > "$ETC_DIR/collector.env"
