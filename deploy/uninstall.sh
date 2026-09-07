@@ -25,7 +25,8 @@ UNIT_DIR=/etc/systemd/system
 # --- Stop & disable every collector unit (BMS + all inverter instances) -------
 mapfile -t UNITS < <(
   systemctl list-units --all --type=service --no-legend \
-    'jkbms-collector.service' 'inverter-collector@*.service' 'jkpb-collector@*.service' 2>/dev/null \
+    'jkbms-collector.service' 'inverter-collector@*.service' 'jkpb-collector@*.service' \
+    'jkpb-modbus-collector@*.service' 2>/dev/null \
     | awk '{print $1}'
 )
 # Always include the base instances in case they are loaded but not listed.
@@ -38,7 +39,8 @@ done
 # --- Remove unit files --------------------------------------------------------
 rm -f "$UNIT_DIR/jkbms-collector.service" \
       "$UNIT_DIR/inverter-collector@.service" \
-      "$UNIT_DIR/jkpb-collector@.service"
+      "$UNIT_DIR/jkpb-collector@.service" \
+      "$UNIT_DIR/jkpb-modbus-collector@.service"
 
 # --- Remove journal retention drop-in -----------------------------------------
 if [[ -f /etc/systemd/journald.conf.d/10-jk-bms.conf ]]; then

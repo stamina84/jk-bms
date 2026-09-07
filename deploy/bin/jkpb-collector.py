@@ -14,9 +14,8 @@
 #
 # It publishes a flat JSON payload to  battery/<name>/mpp-solar  -- byte-identical
 # in shape/topic to what the BLE `jkbms -o json_mqtt` collector emits -- so the
-# server-side battery.conf Telegraf pipeline consumes it with no change. (Note:
-# a 16S pack exposes voltage_cell09..16; battery.conf currently excludes those,
-# so drop them from its excluded_keys if you want all cells in Grafana.)
+# server-side battery.conf Telegraf pipeline consumes it with no change.
+# battery.conf maps cells 01..16 (V_nn / R_nn) and excludes 17..32.
 #
 # The CAN port is left untouched for the inverter link -- this path is RS485 only.
 #

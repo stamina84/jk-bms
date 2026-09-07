@@ -1,0 +1,29 @@
+[Unit]
+Description=JK inverter-BMS MQTT collector on /dev/%i (RS485, modbus)
+Documentation=https://github.com/your-org/jk-bms
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Templated unit: %i is the serial port, e.g. enable with
+#   systemctl enable --now jkpb-modbus-collector@ttyUSB3
+# Same BMS and wire as jkpb-collector@, different UART protocol: this one needs
+# UART1 set to "013 - (9600) JK BMS RS485 modbus" and reads the fields the
+# 4G-GPS/NW protocol has no registers for (live balance current, per-cell wire
+# resistances, SOH). Run ONE of the two per port -- they cannot share a BMS.
+# Needs python3 + pyserial + paho-mqtt (the latter two ship with mpp-solar);
+# python3 is resolved via PATH from collector.env.
+EnvironmentFile=-/etc/jk-bms/collector.env
+ExecStart=/opt/jk-bms/bin/jkpb-modbus-collector.py %i
+Restart=always
+RestartSec=10
+User=root
+# Logs go to the journal, tagged "jkpbm-<port>" e.g. jkpbm-ttyUSB3.
+SyslogIdentifier=jkpbm-%i
+# Cap log floods from a crash loop (per service).
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

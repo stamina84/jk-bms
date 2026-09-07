@@ -37,6 +37,7 @@ done
 shift $((OPTIND - 1))
 
 ARGS=( -u jkbms-collector -u 'inverter-collector@*' -u 'jkpb-collector@*'
+       -u 'jkpb-modbus-collector@*'
        --since "$SINCE" --priority "$PRIORITY"
        --output short-iso )
 if (( FOLLOW )); then

@@ -31,6 +31,12 @@ adapter can't multiplex connections) and for the exclusive serial ports.
   BLE packs. Also a templated per-port service (`jkpb-collector@ttyUSB2`). It has
   a **read-only debug mode** that decodes to the screen without touching MQTT
   (see below).
+- **…the same BMS over modbus:** `jkpb-modbus-collector.py <port>` is an
+  alternative reader for that same BMS on that same wire, for UART1 protocol
+  `013 - JK BMS RS485 modbus`. It reports what the `4E57` protocol has no
+  registers for — live **balance current**, per-cell **wire resistances** and
+  **SOH**. Templated as `jkpb-modbus-collector@ttyUSB3`. Run *one* of the two
+  per BMS: the pack speaks a single UART protocol at a time.
 
 ### Configuring which inverters exist
 
@@ -115,12 +121,12 @@ Published fields (flat JSON, mpp-solar names so `battery.conf` renames apply):
 | `cycle_count`, `cycle_capacity` | |
 | `mos_temp`, `battery_t1`, `battery_t2` | °C |
 
-`current` has no rename in `battery.conf` yet — add `current = "A"` to its
-`renames` block if you want it charted as `A`.
+`battery.conf` renames `current` to `battery_current`, which is the field the
+Solar Grafana dashboards query.
 
 > **16S note:** a PB pack has 16 cells, so it also reports
-> `voltage_cell09..16`. `battery.conf` currently *excludes* those (the BLE packs
-> are 8S) — remove them from its `excluded_keys` to chart all 16 in Grafana.
+> `voltage_cell09..16`. `battery.conf` maps cells `01..16` (`V_nn` / `R_nn`) and
+> excludes `17..32`, so all 16 chart in Grafana with no further change.
 
 **Debug mode (read-only, never publishes).** Before enabling the service,
 smoke-test the wiring. This only prints the decoded values to the screen — it
@@ -153,6 +159,70 @@ Symptom cheat-sheet from the raw poll (`len:` of the reply):
 | `len: 0` | correct wiring, but BMS not answering → wrong UART1 mode, phone app connected, or loose RJ45 |
 | `len: 1` (`00`) | A/B swapped — only the TX-turnaround artifact comes back |
 
+### The same BMS over RS485 *modbus* (balance current, cell resistances, SOH)
+
+The `4E57` protocol above has **no balance-current register at all** — its whole
+map (`0x79..0xC0`) carries balance *settings* plus one "balancer active" bit. If
+you want the live balance current, per-cell wire resistances or SOH, switch the
+BMS to **UART1 → `013 - (9600) JK BMS RS485 modbus`** and run
+[`jkpb-modbus-collector.py`](bin/jkpb-modbus-collector.py) on the same wiring
+(Modbus RTU, function `0x03`, 9600 baud).
+
+Only one collector can run per BMS — the pack speaks one UART protocol at a
+time, so `jkpb-collector@` and `jkpb-modbus-collector@` are mutually exclusive
+on the same port.
+
+Two things about this protocol cost real time to work out, so they are worth
+knowing before you debug it:
+
+- **The slave address is 15, not 1.** It appears to be fixed per unit, so
+  `JKPBM_ADDR=auto` (the default) scans `1..16` at startup and logs what it
+  found; pin it afterwards to skip the scan.
+- **The register address is a byte offset, not a register index.** `CellVol0` is
+  at `0x1200` and `CellVol1` at `0x1202`, so a read of N registers at `A`
+  returns the values at `A, A+2, … A+2(N-1)`. 64 registers (128 bytes) per read
+  is accepted; larger is not. The collector reads two blocks, `0x1200` and
+  `0x1280`.
+- Half-duplex adapters **echo the request back** on RX, and the echo is exactly
+  8 bytes = 4 registers, so a naive parse silently shifts the whole block by 4.
+  The collector locates the reply by scanning for a CRC-valid frame instead.
+
+Config lives in `collector.env`:
+
+```ini
+JKPBM_NAME=jkpbm          # -> topic battery/jkpbm/mpp-solar (per-port: JKPBM_ttyUSB3=pb1)
+JKPBM_ADDR=auto           # or the number it logs, e.g. 15
+JKPBM_BAUD=9600
+JKPB_INTERVAL=30          # shared with the 4E57 collector
+```
+
+On top of the `4E57` fields it publishes:
+
+| Field | Notes |
+|-------|-------|
+| `resistance_cell01…NN` | per-cell wire resistance → `R_nn` |
+| `balance_current` | **live** balance current, signed → `A_bal` |
+| `balance_status`, `balancing` | 0 off / 1 charging / 2 discharging, plus a 0-1 flag |
+| `state_of_health` | % |
+| `max_voltage_cell`, `min_voltage_cell` | 1-based cell numbers |
+| `alarm_bitmask` | BMS error bits |
+| `charge_enabled`, `discharge_enabled` | MOS state |
+| `uptime` | seconds |
+
+`battery_voltage`, `current`, `capacity_remain`, `cycle_count` and the
+temperatures come from the BMS directly here rather than being derived, and
+`battery_power` is the BMS-computed figure signed from the current.
+
+Smoke-test before enabling the service — neither mode publishes to MQTT:
+
+```bash
+/opt/jk-bms/bin/jkpb-modbus-collector.py ttyUSB3 --probe   # one read + dump, exits
+/opt/jk-bms/bin/jkpb-modbus-collector.py ttyUSB3 --debug   # loops on screen
+```
+
+If it exits with `no modbus slave found`, UART1 is not on `013` (or the app is
+connected — the same phone-app gotcha applies to this protocol).
+
 ## Prerequisites
 
 `mpp-solar` and `jkbms` must be installed and on root's PATH (the services
@@ -163,7 +233,8 @@ pip install mppsolar[ble]
 which mpp-solar jkbms      # note the path; defaults assume /usr/local/bin
 ```
 
-The RS485 inverter-BMS collector (`jkpb-collector.py`) additionally needs
+The RS485 inverter-BMS collectors (`jkpb-collector.py`,
+`jkpb-modbus-collector.py`) additionally need
 `python3` and the `pyserial` + `paho-mqtt` modules — both are pulled in by
 `mppsolar`, so a normal install already has them. Verify with:
 
